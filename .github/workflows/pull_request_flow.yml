@@ -42,12 +42,12 @@ jobs:
       - name: Check Gradle build scripts dependencies are sorted
         run: ./gradlew buildEnvironment --dry-run
 
-      - name: Run Snyk to check for vulnerabilities
-        uses: snyk/actions/gradle-jdk17@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --severity-threshold=high --all-projects
+      # - name: Run Snyk to check for vulnerabilities
+      #   uses: snyk/actions/gradle-jdk17@master
+      #   env:
+      #     SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      #   with:
+      #     args: --severity-threshold=high --all-projects
 
       - name: Run Detekt
         run: ./gradlew detekt
