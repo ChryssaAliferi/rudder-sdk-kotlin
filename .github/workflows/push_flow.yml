@@ -1,0 +1,105 @@
+name: Branch Validation
+
+on:
+  push:
+    branches:
+      - '**'        # Match all branches
+      - '!main'     # Exclude main branch
+      - '!release/*' # Exclude release/* branches
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for detecting changes
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle  # This enables Gradle caching
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Check Gradle build scripts dependencies are sorted
+        run: ./gradlew buildEnvironment --dry-run
+
+      - name: Run Detekt
+        run: ./gradlew detekt
+
+      - name: Run Android Lint
+        run: ./gradlew :android:lint
+
+      - name: Find affected modules
+        id: affected-modules
+        run: |
+          # Determine the base commit to compare against
+          if git merge-base --is-ancestor origin/develop HEAD; then
+            # If current branch is derived from develop
+            BASE_BRANCH="origin/develop"
+          else
+            # Otherwise use the most recent ancestor
+            BASE_BRANCH=$(git merge-base HEAD origin/main || git merge-base HEAD origin/develop || echo "HEAD~1")
+          fi
+          
+          echo "Comparing against base: $BASE_BRANCH"
+          
+          CHANGED_FILES=$(git diff --name-only $BASE_BRANCH...HEAD)
+          if echo "$CHANGED_FILES" | grep -q "^core/"; then
+            echo "core=true" >> $GITHUB_OUTPUT
+          else
+            echo "core=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "^android/"; then
+            echo "android=true" >> $GITHUB_OUTPUT
+          else
+            echo "android=false" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "Changes detected:"
+          echo "Core module affected: ${{ steps.affected-modules.outputs.core }}"
+          echo "Android module affected: ${{ steps.affected-modules.outputs.android }}"
+
+      - name: Run Core module tests
+        if: steps.affected-modules.outputs.core == 'true'
+        run: ./gradlew :core:test
+
+      - name: Run Android module tests
+        if: steps.affected-modules.outputs.android == 'true'
+        run: ./gradlew :android:test
+
+      - name: Build project
+        run: ./gradlew build
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            **/build/reports/tests/
+            **/build/reports/detekt/
+            **/build/reports/lint-results*.html
+
+      - name: Notify Slack
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          fields: repo,commit,author,action,eventName,ref,workflow,job,took
+          text: |
+            Branch Validation ${{ job.status == 'success' && 'passed ✅' || 'failed ❌' }}
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.event.head_commit.message }}
+            By: ${{ github.actor }}
+            Link: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
