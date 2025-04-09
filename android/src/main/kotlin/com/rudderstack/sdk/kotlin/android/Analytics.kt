@@ -102,7 +102,6 @@ class Analytics(
      */
     fun endSession() {
         if (!isAnalyticsActive()) return
-
         sessionTrackingPlugin.endSession()
     }
 
