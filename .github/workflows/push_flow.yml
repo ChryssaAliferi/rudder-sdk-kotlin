@@ -29,12 +29,6 @@ jobs:
       - name: Check Gradle build scripts dependencies are sorted
         run: ./gradlew buildEnvironment --dry-run
 
-      - name: Run Detekt
-        run: ./gradlew detekt
-
-      - name: Run Android Lint
-        run: ./gradlew :android:lint
-
       - name: Find affected modules
         id: affected-modules
         run: |
@@ -65,6 +59,17 @@ jobs:
           echo "Changes detected:"
           echo "Core module affected: ${{ steps.affected-modules.outputs.core }}"
           echo "Android module affected: ${{ steps.affected-modules.outputs.android }}"
+     
+      - name: Run Detekt on Core module
+        if: steps.affected-modules.outputs.core == 'true'
+        run: ./gradlew :core:detekt
+
+      - name: Run Detekt on Android module
+        if: steps.affected-modules.outputs.android == 'true'
+        run: ./gradlew :android:detekt
+
+      - name: Run Android Lint
+        run: ./gradlew :android:lint
 
       - name: Run Core module tests
         if: steps.affected-modules.outputs.core == 'true'
